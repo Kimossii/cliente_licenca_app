@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
 use Carbon\Carbon;
+use App\Models\Ativacao;
 
 class ClientController extends Controller
 {
@@ -30,32 +31,40 @@ class ClientController extends Controller
     // Valida o código de licença colado no input
     public function validateLicense(Request $request)
     {
-
         $request->validate([
             'license_key' => 'required|string',
         ]);
-        dd($request)->all();
-        try {
-            // Descriptografar
-            $data = Crypt::decryptString($request->license_key);
+        dd(env('APP_KEY'));
 
-            // Converter JSON em array
+        $message = null;
+
+        try {
+            $data = Crypt::decryptString($request->license_key);
             $licenseData = json_decode($data, true);
 
-            // Verificar data de expiração
             $expiresAt = Carbon::parse($licenseData['expires']);
+            $currentFingerprint = $this->getHardwareFingerprint();
 
             if ($expiresAt->isPast()) {
-                return back()->withErrors(['license_key' => 'Licença expirada!']);
+                $message = ['error' => 'Licença expirada!'];
+            } elseif ($licenseData['fingerprint'] !== $currentFingerprint) {
+                $message = ['error' => 'Licença não corresponde a este dispositivo!'];
+            } else {
+                Ativacao::updateOrCreate(
+                    ['fingerprint' => $currentFingerprint],
+                    ['expires_at' => $expiresAt]
+                );
+                $message = ['success' => 'Licença válida até: ' . $expiresAt->toDateString()];
             }
-            //dd($request);
-            // Se chegou aqui → licença válida
-            return back()->with('success', 'Licença válida até: ' . $expiresAt->toDateString());
-
         } catch (\Exception $e) {
-            return back()->withErrors(['license_key' => 'Licença inválida ou corrompida!']);
+            $message = ['error' => 'Licença inválida ou corrompida!'];
         }
+
+        return isset($message['error'])
+            ? back()->withErrors(['license_key' => $message['error']])
+            : back()->with('success', $message['success']);
     }
+
 
     // Função para gerar fingerprint (Windows, Linux, Mac)
     private function getHardwareFingerprint()

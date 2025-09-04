@@ -1,17 +1,19 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>Validar Licença</title>
 </head>
+
 <body>
     <h2>Validar Licença</h2>
 
-    @if(session('success'))
-        <div style="color: green; font-weight: bold;">{{ session('success') }}</div>
+    @if (session('success'))
+        <div class="alert alert-success">{{ session('success') }}</div>
     @endif
 
-    @if(session('error'))
-        <div style="color: red; font-weight: bold;">{{ session('error') }}</div>
+    @if ($errors->any())
+        <div class="alert alert-danger">{{ $errors->first('license_key') }}</div>
     @endif
 
     <form method="POST" action="{{ route('license.validate') }}">
@@ -22,4 +24,5 @@
         <button type="submit">Validar</button>
     </form>
 </body>
+
 </html>
