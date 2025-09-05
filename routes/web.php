@@ -1,17 +1,15 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\ClientController;
-Route::get('/cliente/gerar-codigo', [ClientController::class, 'showForm']);
-Route::post('/cliente/gerar-codigo', [ClientController::class, 'generateFingerprint']);
+use App\Http\Controllers\LicenseController;
 
-Route::get('/cliente/validar-licenca', [ClientController::class, 'showFormValidar']);
+Route::get('/request-code', [LicenseController::class, 'requestCode'])->name('license.request');
+Route::get('/activate', [LicenseController::class, 'activateForm'])->name('license.activate.form');
+Route::post('/activate', [LicenseController::class, 'activate'])->name('license.activate');
 
-Route::post('/license/validate', [ClientController::class, 'validateLicense'])->name('license.validate');
-
-
+Route::get('/', [LicenseController::class, 'index'])->name('index');
 
 
-Route::get('/', function () {
+Route::get('/h', function () {
     return view('welcome');
 });
