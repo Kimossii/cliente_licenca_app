@@ -48,6 +48,11 @@ class LicenseController extends Controller
 
 
             $path = storage_path('app/license.dat');
+
+            if (!file_exists($path)) {
+                file_put_contents($path, '');
+            }
+
             file_put_contents($path, $request->license_code);
 
             return redirect()->route('index')->with('success', 'Licença ativada com sucesso! Válida até ' . $dados['expira_em']);
