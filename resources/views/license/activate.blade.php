@@ -22,6 +22,7 @@
     <div style="display: flex; gap: 10px;">
         <button type="submit" name="action" value="activate" style="flex: 1; min-width: 80px; max-width: 140px; padding: 6px 12px; font-size: 14px;">Ativar</button>
         <a t href="{{route('license.request')}}" style="flex: 1; min-width: 80px; max-width: 140px; padding: 6px 12px; font-size: 14px;">Código de Ativação</a>
+        <a href="{{route('import.uploadKey')}}" style="flex: 1; min-width: 80px; max-width: 140px; padding: 6px 12px; font-size: 14px;">Importar chave pública</a>
     </div>
     </div>
 </form>
