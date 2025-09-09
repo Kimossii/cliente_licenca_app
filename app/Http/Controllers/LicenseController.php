@@ -220,37 +220,35 @@ class LicenseController extends Controller
 
     public static function checkLicense()
     {
-        try {
-            if (file_exists(getClientStoragePathDat()) && filesize(getClientStoragePathDat()) > 0) {
-
-                $licenseCode = file_get_contents(getClientStoragePathDat());
-                $dados = json_decode(decryptLicenseCode($licenseCode), true);
-            } else {
-
-                $license = License::latest()->first();
-                if (!$license) {
-                    return ['valid' => false, 'days_left' => 0];
-                }
-                $dados = json_decode(decryptLicenseCode($license->license_code), true);
-            }
-
-            $now = Carbon::now();
-            $expire = Carbon::parse($dados['expire_in']);
-            $daysLeft = ceil($now->diffInDays($expire, false));
-
-            // valida hardware
-            
+        //try {
+        if (file_exists(getClientStoragePathDat()) && filesize(getClientStoragePathDat()) > 0) {
+            $licenseCode = file_get_contents(getClientStoragePathDat());
+            $dados = json_decode(decryptLicenseCode($licenseCode), true);
+        } else {
+            $license = License::latest()->first();
+            if (!$license) {
                 return ['valid' => false, 'days_left' => 0];
             }
+            $dados = json_decode(decryptLicenseCode($license->license_code), true);
+        }
 
-            return [
-                'valid' => $daysLeft >= 0,
-                'days_left' => $daysLeft
-            ];
+        $now = Carbon::now();
+        $expire = Carbon::parse($dados['expire_in']);
+        $daysLeft = ceil($now->diffInDays($expire, false));
 
-        } catch (\Exception $e) {
+        // valida hardware (exemplo de validação)
+        $hardwareOk = true; // aqui você faz sua validação real
+        if (!$hardwareOk) {
             return ['valid' => false, 'days_left' => 0];
         }
+
+        return [
+            'valid' => $daysLeft >= 0,
+            'days_left' => $daysLeft
+        ];
+        //} catch (\Exception $e) {
+        //  return ['valid' => false, 'days_left' => 0];
+        //}
     }
 
 
