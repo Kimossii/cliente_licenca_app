@@ -19,4 +19,5 @@ class LicenseHelper
 
         return strrev($segredo);
     }
+    
 }

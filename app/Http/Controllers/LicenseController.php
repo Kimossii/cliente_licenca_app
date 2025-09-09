@@ -9,6 +9,7 @@ use App\Models\License;
 use App\Helpers\LicenseHelper;
 use Illuminate\Support\Facades\File;
 use Illuminate\Contracts\Encryption\DecryptException;
+use Illuminate\Servives\LicenseService;
 
 
 
@@ -17,7 +18,7 @@ class LicenseController extends Controller
 
     public function formKeyPublic()
     {
-        $keysPath = storage_path('keys/public.pem');
+        $keysPath = getClientStoragePathKeyPublic();//storage_path('keys/public.pem');
         $chaveExiste = File::exists($keysPath);
 
         return view("client.uploader_key", compact('chaveExiste'));
@@ -29,7 +30,7 @@ class LicenseController extends Controller
             'public_key' => 'required|file|mimes:txt,pem|max:1024',
         ]);
 
-        $keysPath = storage_path('keys');
+        $keysPath = getStorageKeys();
         if (File::exists($keysPath) && !$request->has('overwrite')) {
             return redirect()->back()->with('warning', 'Chave pública já existe. Marque para substituir.');
         }
@@ -57,14 +58,13 @@ class LicenseController extends Controller
     public function activate(Request $request)
     {
         $dados = null;
-        $keysPath = storage_path('keys');
-        if (!File::exists($keysPath)) {
+        if (!File::exists(getStorageKeys())) {
             return redirect()->back()->with('error', 'Chave pública não existe. Faça o upload primeiro, para activar a sua licença.');
         }
 
         if (!empty($request->license_code)) {
             try {
-                $dados = json_decode(Crypt::decryptString($request->license_code), true);
+                $dados = json_decode(decryptLicenseCode($request->license_code), true);
             } catch (DecryptException $e) {
                 return back()->with('error', 'Código de licença inválido!');
             }
@@ -88,15 +88,15 @@ class LicenseController extends Controller
 
         // ✅ Verificação RSA
         if (!empty($dados['rsa'])) {
-            $publicKeyPath = storage_path('keys/public.pem');
+            $publicKeyPath = getClientStoragePathKeyPublic();
             $publicKey = openssl_pkey_get_public(file_get_contents($publicKeyPath));
             $assinaturaRSA = base64_decode($dados['rsa']);
 
             if (
                 openssl_verify(json_encode([
-                    'cliente' => $dados['cliente'],
+                    'client_name' => $dados['client_name'],
                     'hardware_id' => $dados['hardware_id'],
-                    'expira_em' => $dados['expira_em'],
+                    'expire_in' => $dados['expire_in'],
                 ]), $assinaturaRSA, $publicKey, OPENSSL_ALGO_SHA256) !== 1
             ) {
                 return back()->with('error', 'Licença adulterada (Chave pública inválida), contate o suporte para adquirir uma nova chave!');
@@ -106,12 +106,12 @@ class LicenseController extends Controller
         }
 
         // ⏳ Valida expiração
-        if (Carbon::now()->gt(Carbon::parse($dados['expira_em']))) {
+        if (Carbon::now()->gt(Carbon::parse($dados['expire_in']))) {
             return back()->with('error', 'Licença expirada!');
         }
 
         // 💻 Valida hardware
-        $hardwareId = php_uname('n');
+        $hardwareId = getHardwareFingerprint();
         if ($dados['hardware_id'] !== $hardwareId) {
             return back()->with('error', 'Licença não corresponde a esta máquina!');
         }
@@ -121,31 +121,26 @@ class LicenseController extends Controller
             ['id' => 1],
             [
                 'license_code' => $request->license_code,
-                'valid_until' => $dados['expira_em'],
+                'valid_until' => $dados['expire_in'],
             ]
         );
 
-        file_put_contents(storage_path('app/license.dat'), $request->license_code);
+        file_put_contents(getClientStoragePathDat(), $request->license_code);
 
-        return redirect()->route('index')->with('success', 'Licença ativada com sucesso! Válida até ' . $dados['expira_em']);
+        return redirect()->route('index')->with('success', 'Licença ativada com sucesso! Válida até ' . $dados['expire_in']);
     }
 
 
 
-
+    //Método para gerar request code
     public function requestCode()
     {
-        $hardwareId = php_uname('n');
-        preg_match('/^[^-]+/', php_uname('n'), $matches);
-        $nomeCliente = $matches[0];
         $dados = [
-            'cliente_nome' => $nomeCliente,
-            'hardware_id' => $hardwareId,
+            'client_name' => clientName(),
+            'hardware_id' => getHardwareFingerprint(),
             'data' => now()->toDateString(),
         ];
-
-
-        $requestCode = base64_encode(json_encode($dados));
+        $requestCode = generateRequestCode($dados);
 
         return view('license.request', compact('requestCode'));
     }
@@ -153,13 +148,12 @@ class LicenseController extends Controller
 
     public static function isValid()
     {
-        $path = storage_path('app/license.dat');
-        $hardwareId = php_uname('n');
 
         //try {
         // Pega a licença do arquivo ou do banco
-        if (file_exists($path) && filesize($path) > 0) {
-            $licenseCode = file_get_contents($path);
+
+        if (file_exists(getClientStoragePathDat()) && filesize(getClientStoragePathDat()) > 0) {
+            $licenseCode = file_get_contents(getClientStoragePathDat());
         } else {
             $latestLicense = License::latest()->first();
             if ($latestLicense) {
@@ -173,14 +167,14 @@ class LicenseController extends Controller
 
 
 
-        $dados = json_decode(Crypt::decryptString($licenseCode), true);
+        $dados = json_decode(decryptLicenseCode($licenseCode), true);
 
         // ⏳ Verifica expiração
-        if (now()->gt(Carbon::parse($dados['expira_em'])))
+        if (now()->gt(Carbon::parse($dados['expire_in'])))
             return false;
 
         // 💻 Verifica hardware
-        if ($dados['hardware_id'] !== $hardwareId)
+        if ($dados['hardware_id'] !== getHardwareFingerprint())
             return false;
 
         // 🔐 1️⃣ Verifica HMAC (remove apenas o HMAC antes de recalcular)
@@ -193,16 +187,18 @@ class LicenseController extends Controller
             return false;
 
         // 🔐 2️⃣ Verifica RSA
+        if (!file_exists(getClientStoragePathKeyPublic())) {
+            return false;
+        }
         if (!empty($dados['rsa'])) {
-            $publicKeyPath = storage_path('keys/public.pem');
-            $publicKey = openssl_pkey_get_public(file_get_contents($publicKeyPath));
+            $publicKey = openssl_pkey_get_public(file_get_contents(getClientStoragePathKeyPublic()));
             $assinaturaRSA = base64_decode($dados['rsa']);
 
             if (
                 openssl_verify(json_encode([
-                    'cliente' => $dados['cliente'],
+                    'client_name' => $dados['client_name'],
                     'hardware_id' => $dados['hardware_id'],
-                    'expira_em' => $dados['expira_em'],
+                    'expire_in' => $dados['expire_in'],
                 ]), $assinaturaRSA, $publicKey, OPENSSL_ALGO_SHA256) !== 1
             ) {
                 //return back()->with('error', 'Licença adulterada (assinatura RSA inválida)!');
@@ -222,37 +218,28 @@ class LicenseController extends Controller
 
 
 
-
-
-
-
-
-
     public static function checkLicense()
     {
-        $path = storage_path('app/license.dat');
-        $hardwareId = php_uname('n');
-
         try {
-            if (file_exists($path) && filesize($path) > 0) {
+            if (file_exists(getClientStoragePathDat()) && filesize(getClientStoragePathDat()) > 0) {
 
-                $licenseCode = file_get_contents($path);
-                $dados = json_decode(Crypt::decryptString($licenseCode), true);
+                $licenseCode = file_get_contents(getClientStoragePathDat());
+                $dados = json_decode(decryptLicenseCode($licenseCode), true);
             } else {
 
                 $license = License::latest()->first();
                 if (!$license) {
                     return ['valid' => false, 'days_left' => 0];
                 }
-                $dados = json_decode(Crypt::decryptString($license->license_code), true);
+                $dados = json_decode(decryptLicenseCode($license->license_code), true);
             }
 
             $now = Carbon::now();
-            $expire = Carbon::parse($dados['expira_em']);
+            $expire = Carbon::parse($dados['expire_in']);
             $daysLeft = ceil($now->diffInDays($expire, false));
 
             // valida hardware
-            if ($dados['hardware_id'] !== $hardwareId) {
+            
                 return ['valid' => false, 'days_left' => 0];
             }
 

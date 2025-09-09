@@ -29,7 +29,9 @@
             "Database\\Seeders\\": "database/seeders/"
         },
         "files": [
-            "app/Helpers/HardwareHelper.php"
+            "app/Helpers/HardwareHelper.php",
+            "app/Helpers/globalVariables.php",
+            "app/Helpers/LicenseHelper.php"
         ]
     },
     "autoload-dev": {

@@ -31,4 +31,37 @@ if (!function_exists('getHardwareFingerprint')) {
 
         return hash('sha256', $diskSerial . $mac);
     }
+    function clientName()
+    {
+        // Pega o hostname do servidor
+        $hostname = php_uname('n') ?: 'unknown'; // fallback se php_uname falhar
+
+        // Usa regex para pegar a parte antes do primeiro hífen
+        if (preg_match('/^[^-]+/', $hostname, $matches)) {
+            $name = $matches[0];
+        } else {
+            $name = $hostname; // fallback para hostname inteiro
+        }
+
+        // Remove espaços extras e caracteres indesejados
+        $name = preg_replace('/[^A-Za-z0-9_\-]/', '', $name);
+
+        // Se ainda estiver vazio, usa um valor padrão
+        return $name ?: 'client';
+    }
+    //Método para gerar request code
+    function generateRequestCode(array $dados)
+    {
+        return base64_encode(json_encode($dados));
+    }
+
+    function decryptLicenseCode(string $licenseCode)
+    {
+        try {
+            return \Illuminate\Support\Facades\Crypt::decryptString($licenseCode);
+        } catch (\Exception $e) {
+            return null;
+        }
+    }
 }
+

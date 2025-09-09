@@ -10,7 +10,7 @@ return new class extends Migration {
      */
     public function up(): void
     {
-        Schema::create('licenses', function (Blueprint $table) {
+        Schema::create('client_licenses', function (Blueprint $table) {
             $table->id();
             $table->text('license_code')->nullable();
             $table->date('valid_until')->nullable();
@@ -18,12 +18,11 @@ return new class extends Migration {
         });
     }
 
-
     /**
      * Reverse the migrations.
      */
     public function down(): void
     {
-        Schema::dropIfExists('licenses');
+        Schema::dropIfExists('client_licenses');
     }
 };
